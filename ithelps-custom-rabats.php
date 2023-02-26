@@ -1,21 +1,38 @@
 <?php
 /*
-Plugin Name: IT Helps custom rabats
-Description: Plugin for custom configurations rabats
+Plugin Name: IT Helps Custom rabats
+Description: Plugin for custom rabats, 10+1, 20+2 free product
 Version: 1.0
-Author: IT Helps
+Author: Janypka
+Author URI: https://www.janypka.com
 */
 
-add_action( 'woocommerce_before_calculate_totals', 'addFreeProducts' );
 
+function my_woocommerce_price_increase( $cart_object ) {
+    //change price of free added products
+    foreach ( $cart_object->cart_contents as $cart_item_key => $cart_item ) {
+      if(isset($cart_item['treat_as_fee'])){
+        $price = $cart_item['data']->get_price();
+        $new_price = 0.01;
+        $cart_item['data']->set_price( $new_price );
+      }
 
+    }
+}
 
+add_action( 'woocommerce_before_calculate_totals', 'my_woocommerce_price_increase', 99, 1 );
 
-function addFreeProducts(){
+//add_action( 'woocommerce_calculate_totals', 'addFreeProducts',10,1 );
 
+function addFreeProducts($cart_object){
+
+	$max_levels = 20;
+
+  if ( is_admin() && ! defined( 'DOING_AJAX' ) )
+    return;
 
   if ( did_action( 'woocommerce_before_calculate_totals' ) >= 2 )
-        return;
+    return;
 
 
   //delete free added products
@@ -26,7 +43,9 @@ function addFreeProducts(){
   }
   //end delete free added products
 
-  foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
+
+  foreach ( WC()->cart->cart_contents as $cart_item_key => $cart_item ) {
+
         if(!isset($cart_item['treat_as_fee'])){
           $product = $cart_item['data'];
           $cartAmount = $cart_item['quantity'];
@@ -38,99 +57,50 @@ function addFreeProducts(){
             $parent_id = $product->get_id();
           }
 
-
-
           $rules = get_rabats_posts();
           foreach ($rules as $rule) {
-              $free_products = (get_post_meta($rule->ID, 'free-products', true));
-              $amount_to_free = (get_post_meta($rule->ID, 'amount-to-free', true));
-
-              $free_products2 = (get_post_meta($rule->ID, 'free-products2', true));
-              $amount_to_free2 = (get_post_meta($rule->ID, 'amount-to-free2', true));
-
-              $free_products3 = (get_post_meta($rule->ID, 'free-products3', true));
-              $amount_to_free3 = (get_post_meta($rule->ID, 'amount-to-free3', true));
-
 
               $product_ids = (get_post_meta($rule->ID, 'rabat_products', true));
               $product_ids = explode(',',$product_ids);
-
-
-
-
 
               if(in_array($parent_id,$product_ids)){
                 $amount_to_free_final = 0;
                 $free_products_final=0;
 
-                if(isset($free_products)
-                    && isset($amount_to_free)
-                    && !empty($free_products)
-                    && !empty($amount_to_free)
-                    && $free_products!=0
-                    && $amount_to_free!=0
+								foreach (range(0, $max_levels) as $i){
+									$free_products = (get_post_meta($rule->ID, 'free-products'.$i, true));
+		              $amount_to_free = (get_post_meta($rule->ID, 'amount-to-free'.$i, true));
 
-                ){
-                  if($cartAmount >$amount_to_free) {
-                      $amount_to_free_final = $amount_to_free;
-                      $free_products_final=$free_products;
-                  }
-                }
+	                if(isset($free_products)
+	                    && isset($amount_to_free)
+	                    && !empty($free_products)
+	                    && !empty($amount_to_free)
+	                    && $free_products!=0
+	                    && $amount_to_free!=0
 
-                if(isset($free_products2)
-                    && isset($amount_to_free2)
-                    && !empty($free_products2)
-                    && !empty($amount_to_free2)
-                    && $free_products2!=0
-                    && $amount_to_free2!=0
+	                ){
+	                  if($cartAmount >= $amount_to_free) {
+	                      $amount_to_free_final = $amount_to_free;
+	                      $free_products_final=$free_products;
+	                  }
+	                }
+								}
 
-                ){
-                  if($cartAmount >$amount_to_free2) {
-                      $amount_to_free_final = $amount_to_free2;
-                      $free_products_final=$free_products2;
-                  }
-                }
-
-                if(isset($free_products3)
-                    && isset($amount_to_free3)
-                    && !empty($free_products3)
-                    && !empty($amount_to_free3)
-                    && $free_products2!=0
-                    && $amount_to_free2!=0
-
-                ){
-                  if($cartAmount >$amount_to_free3) {
-                      $amount_to_free_final = $amount_to_free3;
-                      $free_products_final=$free_products3;
-                  }
-                }
 
                 if($cartAmount >= $amount_to_free_final){
                   $freeItem  = WC()->cart->add_to_cart($product->get_id(), $free_products_final, 0, array(), array('treat_as_fee' => true,'disable_qty' => true));
                 }
               }
-
           }
-
-
-
-
 
         }
   }
 
-  //change price of free added products
-  foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
-    if(isset($cart_item['treat_as_fee'])){
-      $cart_item['data']->set_price( 0.01 );
-      $cart_item['data']->set_name($cart_item['data']->get_title().' FREE');
-      $cart_item['disable_qty'] = true;
-    }
-  }
-  //end change price of free added products
-
+  WC()->cart->calculate_totals();
 
 }
+
+
 
 
 function get_rabats_posts() {
@@ -139,13 +109,9 @@ function get_rabats_posts() {
     'post_status' => 'publish',
     'posts_per_page' => -1
   );
-
   $rabats_posts = get_posts($args);
-
   return $rabats_posts;
 }
-
-
 
 
 // Register custom post type "Rabat"
@@ -191,6 +157,7 @@ function add_rabat_options() {
 }
 
 function rabat_options_callback( $post ) {
+	$max_levels = 20;
   wp_nonce_field( basename( __FILE__ ), 'rabat_nonce' );
   $rabat_stored_meta = get_post_meta( $post->ID );
 
@@ -199,48 +166,42 @@ function rabat_options_callback( $post ) {
         'numberposts' => -1
     ));
 
+  $rules = get_rabats_posts();
+  $allAlreadySelectedProductsIDs = [];
+  $productIdRuleName = [];
+  foreach ($rules as $rule) {
+    if($rule->ID!=$post->ID){
+      $product_ids = (get_post_meta($rule->ID, 'rabat_products', true));
+      $product_ids = explode(',',$product_ids);
+      foreach ($product_ids as $prid) {
+        $allAlreadySelectedProductsIDs[]= $prid;
+        $productIdRuleName[$prid] = get_the_title( $rule->ID );
+
+      }
+    }
+
+  }
+
   ?>
 
+	<?php foreach (range(0, $max_levels) as $i): ?>
+		<b>Level <?=$i?></b>
+		<p>
 
-  <b>Level 1</b>
+			<input type="text" name="amount-to-free<?=$i?>" id="amount-to-free<?=$i?>" value="<?php if ( isset ( $rabat_stored_meta['amount-to-free'.$i] ) ) echo $rabat_stored_meta['amount-to-free'.$i][0]; ?>" />
+			<label for="amount-to-free<?=$i?>" class="rabat-row-title"><?php _e( 'Amount of products to add Free products', 'ith-custom-rabats' )?></label>
+		</p>
+		<p>
+			<input type="text" name="free-products<?=$i?>" id="free-products<?=$i?>" value="<?php if ( isset ( $rabat_stored_meta['free-products'.$i] ) ) echo $rabat_stored_meta['free-products'.$i][0]; ?>" />
+			<label for="free-products<?=$i?>" class="rabat-row-title"><?php _e( 'Number of Free Products added', 'ith-custom-rabats' )?></label>
+		</p>
+
+	<?php endforeach; ?>
+
+
+
+  <b><?php _e( 'Select products', 'ith-custom-rabats' )?></b>
   <p>
-
-    <input type="text" name="amount-to-free" id="amount-to-free" value="<?php if ( isset ( $rabat_stored_meta['amount-to-free'] ) ) echo $rabat_stored_meta['amount-to-free'][0]; ?>" />
-    <label for="amount-to-free" class="rabat-row-title"><?php _e( 'Amount of products to add Free products', 'rabat' )?></label>
-  </p>
-  <p>
-
-    <input type="text" name="free-products" id="free-products" value="<?php if ( isset ( $rabat_stored_meta['free-products'] ) ) echo $rabat_stored_meta['free-products'][0]; ?>" />
-    <label for="free-products" class="rabat-row-title"><?php _e( 'Number of Free Products added', 'rabat' )?></label>
-  </p>
-
-  <b>Level 2</b>
-  <p>
-
-    <input type="text" name="amount-to-free2" id="amount-to-free2" value="<?php if ( isset ( $rabat_stored_meta['amount-to-free2'] ) ) echo $rabat_stored_meta['amount-to-free2'][0]; ?>" />
-    <label for="amount-to-free2" class="rabat-row-title"><?php _e( 'Amount of products to add Free products', 'rabat' )?></label>
-  </p>
-  <p>
-
-    <input type="text" name="free-products2" id="free-products2" value="<?php if ( isset ( $rabat_stored_meta['free-products2'] ) ) echo $rabat_stored_meta['free-products2'][0]; ?>" />
-    <label for="free-products2" class="rabat-row-title"><?php _e( 'Number of Free Products added', 'rabat' )?></label>
-  </p>
-
-  <b>Level 3</b>
-  <p>
-
-    <input type="text" name="amount-to-free3" id="amount-to-free3" value="<?php if ( isset ( $rabat_stored_meta['amount-to-free3'] ) ) echo $rabat_stored_meta['amount-to-free3'][0]; ?>" />
-    <label for="amount-to-free3" class="rabat-row-title"><?php _e( 'Amount of products to add Free products', 'rabat' )?></label>
-  </p>
-  <p>
-
-    <input type="text" name="free-products3" id="free-products3" value="<?php if ( isset ( $rabat_stored_meta['free-products3'] ) ) echo $rabat_stored_meta['free-products3'][0]; ?>" />
-    <label for="free-products3" class="rabat-row-title"><?php _e( 'Number of Free Products added', 'rabat' )?></label>
-  </p>
-
-
-  <p>
-    <label for="rabat_products" class="rabat-row-title"><?php _e( 'Select products', 'rabat' )?></label><br>
     <?php
     if ( isset ( $rabat_stored_meta['rabat_products'][0] ) ){
       $productsArr = explode(',',$rabat_stored_meta['rabat_products'][0]);
@@ -253,8 +214,15 @@ function rabat_options_callback( $post ) {
     if (!empty($products)) {
         // Loop through all products
         foreach ($products as $product) {
-            $checked = in_array($product->ID,$productsArr) ? 'checked': '';
-            echo '<input type="checkbox" name="rabat_products[]" '.$checked.' value="' . $product->ID . '">' . $product->post_title . '<br>';
+            $sufix = '';
+            $state = in_array($product->ID,$productsArr) ? 'checked': '';
+            if(in_array($product->ID,$allAlreadySelectedProductsIDs)){
+              $state .= 'disabled';
+              if(isset($productIdRuleName[$product->ID])){
+                $sufix = '<span style="font-size:12px"> Used in "'.$productIdRuleName[$product->ID].'"</span>';
+              }
+            }
+            echo '<input type="checkbox" name="rabat_products[]" '.$state.' value="' . $product->ID . '">' .'<b>'. $product->post_title.'</b>' .$sufix. '<br>';
         }
     } else {
         // Output a message if there are no products
@@ -272,6 +240,7 @@ add_action( 'add_meta_boxes', 'add_rabat_options' );
 
 // Save options "Free Products" and "Amount to Free" to Rabat custom post
 function save_rabat_options( $post_id ) {
+	$max_levels = 20;
   // Check if nonce is set
   if ( !isset( $_POST['rabat_nonce'] ) ) {
     return;
@@ -287,35 +256,19 @@ function save_rabat_options( $post_id ) {
     return;
   }
 
-  // Save "Free Products" option
-  if ( isset( $_POST['free-products'] ) ) {
-    update_post_meta( $post_id, 'free-products', sanitize_text_field( $_POST['free-products'] ) );
-  }
+	foreach (range(0, $max_levels) as $i){
+	  // Save "Free Products" option
 
-  // Save "Amount to Free" option
-  if ( isset( $_POST['amount-to-free'] ) ) {
-    update_post_meta( $post_id, 'amount-to-free', sanitize_text_field( $_POST['amount-to-free'] ) );
-  }
+	  if ( isset( $_POST['free-products'.$i] ) ) {
+	    update_post_meta( $post_id, 'free-products'.$i, sanitize_text_field( $_POST['free-products'.$i] ) );
+	  }
 
-  // Save "Free Products" option
-  if ( isset( $_POST['free-products2'] ) ) {
-    update_post_meta( $post_id, 'free-products2', sanitize_text_field( $_POST['free-products2'] ) );
-  }
+	  // Save "Amount to Free" option
+	  if ( isset( $_POST['amount-to-free'.$i] ) ) {
+	    update_post_meta( $post_id, 'amount-to-free'.$i, sanitize_text_field( $_POST['amount-to-free'.$i] ) );
+	  }
+	}
 
-  // Save "Amount to Free" option
-  if ( isset( $_POST['amount-to-free2'] ) ) {
-    update_post_meta( $post_id, 'amount-to-free2', sanitize_text_field( $_POST['amount-to-free2'] ) );
-  }
-
-  // Save "Free Products" option
-  if ( isset( $_POST['free-products3'] ) ) {
-    update_post_meta( $post_id, 'free-products3', sanitize_text_field( $_POST['free-products3'] ) );
-  }
-
-  // Save "Amount to Free" option
-  if ( isset( $_POST['amount-to-free3'] ) ) {
-    update_post_meta( $post_id, 'amount-to-free3', sanitize_text_field( $_POST['amount-to-free3'] ) );
-  }
 
   if ( isset( $_POST['rabat_products'] ) ) {
     update_post_meta( $post_id, 'rabat_products', sanitize_text_field( implode(',', $_POST['rabat_products']) ) );
